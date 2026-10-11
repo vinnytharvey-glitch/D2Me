@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>D2Me</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0a; color: #e6e6e6; font-family: -apple-system, 'Segoe UI', sans-serif; min-height: 100vh; }
+  h1, h2, h3, .orb { font-family: 'Orbitron', 'Avenir Next', sans-serif; }
+  button { font-family: inherit; cursor: pointer; }
+  .login { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+  .diamond { width: 42px; height: 42px; background: #ff6600; transform: rotate(45deg); border-radius: 4px; box-shadow: 0 0 24px rgba(255,102,0,.6); }
+  .btn { background: #ff6600; color: #0a0a0a; border: none; border-radius: 4px; padding: 12px 22px; font-weight: 700; letter-spacing: 1px; }
+  .btn.secondary { background: #1a1a1a; color: #e6e6e6; border: 1px solid #333; }
+  .btn:disabled { opacity: .4; }
+  .header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #222; position: sticky; top: 0; background: #0a0a0a; z-index: 5; }
+  .header h1 { font-size: 18px; letter-spacing: 3px; color: #ff6600; }
+  .tabs { display: flex; gap: 8px; padding: 10px 16px; overflow-x: auto; }
+  .tab { flex: 0 0 auto; border: 1px solid #333; border-radius: 4px; padding: 8px 12px; background: #141414; color: #ccc; display: flex; align-items: center; gap: 8px; }
+  .tab.active { border-color: #ff6600; color: #fff; box-shadow: 0 0 8px rgba(255,102,0,.4); }
+  .tab img { width: 28px; height: 28px; border-radius: 3px; }
+  .tab .pwr { color: #ff6600; font-weight: 700; font-size: 12px; }
+  .section { padding: 8px 16px 16px; }
+  .section h3 { font-size: 11px; letter-spacing: 2px; color: #888; margin: 10px 0 8px; text-transform: uppercase; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 8px; }
+  .card { position: relative; aspect-ratio: 1; background: #101010; border: 1px solid var(--rc, #262626); border-radius: 4px; overflow: hidden; }
+  .card img { width: 100%; height: 100%; object-fit: contain; }
+  .card .strip { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--rc); }
+  .card .pwr { position: absolute; bottom: 2px; right: 4px; font-size: 10px; font-weight: 700; text-shadow: 0 0 3px #000; }
+  .card.equipped { box-shadow: inset 0 0 0 2px #ff6600; }
+  .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.78); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
+  @media (min-width: 500px) { .backdrop { align-items: center; } }
+  .sheet { background: #0a0a0a; border: 1px solid var(--rc, #333); border-radius: 10px 10px 0 0; width: 100%; max-width: 420px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  @media (min-width: 500px) { .sheet { border-radius: 8px; } }
+  .sheet .title { font-size: 16px; font-weight: 700; color: #fff; }
+  .sheet .meta { font-size: 11px; color: #888; letter-spacing: 1px; text-transform: uppercase; }
+  .sheet .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .toasts { position: fixed; bottom: 12px; left: 12px; right: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 50; }
+  .toast { background: #141414; border: 1px solid #ff6600; border-radius: 4px; padding: 10px 12px; font-size: 12px; }
+  .toast.err { border-color: #b02020; color: #ff9d9d; }
+  .center { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; }
+  .spin { width: 34px; height: 34px; border: 3px solid #333; border-top-color: #ff6600; border-radius: 50%; animation: sp 1s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .err { color: #ff9d9d; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback } = React;
+
+/* ---------- config (edit here if you ever rotate keys) ---------- */
+const API_KEY   = "15908787485f4498aa540c549430c2a";
+const CLIENT_ID = "55635";
+const REDIRECT_URI = location.origin + location.pathname; // must match Bungie portal
+
+const VAULT_BUCKET = 138197802;
+const POSTMASTER_BUCKET = 215593132;
+const CLASS_NAMES = ["Titan", "Hunter", "Warlock"];
+const TOKEN_KEY = "d2me_token";
+
+/* ---------- oauth ---------- */
+function getToken() { try { return JSON.parse(localStorage.getItem(TOKEN_KEY)); } catch { return null; } }
+function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+function startLogin() {
+  const state = Math.random().toString(36).slice(2);
+  sessionStorage.setItem("d2me_state", state);
+  location.href = "https://www.bungie.net/en/OAuth/Authorize?client_id=" + CLIENT_ID +
+    "&response_type=code&state=" + encodeURIComponent(state);
+}
+async function handleOAuthReturn() {
+  const p = new URLSearchParams(location.search);
+  const code = p.get("code");
+  if (!code) return false;
+  const state = p.get("state");
+  if (state !== sessionStorage.getItem("d2me_state")) { history.replaceState(null, "", location.pathname); throw new Error("OAuth state mismatch"); }
+  history.replaceState(null, "", location.pathname);
+  const res = await fetch("https://www.bungie.net/Platform/App/OAuth/Token/", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "authorization_code", code, client_id: CLIENT_ID })
+  });
+  const j = await res.json();
+  if (!j.access_token) throw new Error(j.error_description || "Token exchange failed");
+  localStorage.setItem(TOKEN_KEY, JSON.stringify({ access_token: j.access_token, expires: Date.now() + (j.expires_in - 120) * 1000 }));
+  return true;
+}
+
+/* ---------- bungie api ---------- */
+async function api(path, method, body) {
+  const tok = getToken();
+  if (!tok || tok.expires < Date.now()) { clearToken(); throw new Error("SESSION_EXPIRED"); }
+  const res = await fetch("https://www.bungie.net" + path, {
+    method: method || "GET",
+    headers: { "X-API-Key": API_KEY, "Authorization": "Bearer " + tok.access_token, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const j = await res.json();
+  if (j.Response === undefined) {
+    if (j.ErrorStatus === "WebAuthRequired" || j.ErrorStatus === "ApiInvalidOrExpiredAccessToken") { clearToken(); throw new Error("SESSION_EXPIRED"); }
+    throw new Error(j.Message || j.ErrorStatus || "API error");
+  }
+  return j.Response;
+}
+
+/* ---------- manifest + IndexedDB cache ---------- */
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("d2me", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbSet(k, v) { try { const db = await idbOpen(); return new Promise((res) => { const tx = db.transaction("kv", "readwrite"); tx.objectStore("kv").put(v, k); tx.oncomplete = res; tx.onerror = res; }); } catch { return null; } }
+async function idbGet(k) { try { const db = await idbOpen(); return new Promise((res) => { const rq = db.transaction("kv", "readonly").objectStore("kv").get(k); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => res(null); }); } catch { return null; } }
+
+async function loadManifest() {
+  const idxRes = await fetch("https://www.bungie.net/Platform/Destiny2/Manifest/", { headers: { "X-API-Key": API_KEY } });
+  const idx = await idxRes.json();
+  if (idx.Response === undefined) throw new Error(idx.Message || "Manifest unavailable");
+  const v = idx.Response.version, paths = idx.Response.jsonWorldComponentContentPaths.en;
+  let items = await idbGet("items-" + v), buckets = await idbGet("buckets-" + v);
+  if (!items || !buckets) {
+    const [i, b] = await Promise.all([
+      fetch("https://www.bungie.net" + paths.DestinyInventoryItemDefinition).then(r => r.json()),
+      fetch("https://www.bungie.net" + paths.DestinyBucketDefinition).then(r => r.json())
+    ]);
+    items = i; buckets = b;
+    idbSet("items-" + v, items); idbSet("buckets-" + v, buckets);
+  }
+  return { items, buckets: buckets.Response || buckets };
+}
+
+/* ---------- data shaping ---------- */
+function buildWorld(profileResp, manifest) {
+  const chars = profileResp.characters.data;
+  const equip = profileResp.characterEquipment && profileResp.characterEquipment.data || {};
+  const inv = profileResp.characterInventories && profileResp.characterInventories.data || {};
+  const inst = (profileResp.itemComponents && profileResp.itemComponents.instances && profileResp.itemComponents.instances.data) || {};
+  const characters = Object.entries(chars).map(([id, c]) => ({
+    id, name: CLASS_NAMES[c.classType] || "Guardian", light: c.light || 0,
+    emblem: c.emblemPath ? "https://www.bungie.net" + c.emblemPath : null,
+    bg: c.emblemBackgroundPath ? "https://www.bungie.net" + c.emblemBackgroundPath : null
+  }));
+  const items = []; const seenVault = new Set();
+  function mk(it, owner, location) {
+    const d = manifest.items[it.itemHash] || null;
+    const p = it.itemInstanceId && inst[it.itemInstanceId];
+    items.push({
+      instanceId: it.itemInstanceId, hash: it.itemHash, bucketHash: it.bucketHash,
+      location, owner, power: p && p.primaryStat ? p.primaryStat.value : null,
+      def: d
+    });
+  }
+  for (const [cid, data] of Object.entries(inv)) {
+    for (const it of (data.items || [])) {
+      if (it.bucketHash === VAULT_BUCKET) { if (!seenVault.has(it.itemInstanceId)) { seenVault.add(it.itemInstanceId); mk(it, null, "vault"); } }
+      else if (it.bucketHash === POSTMASTER_BUCKET) mk(it, cid, "postmaster");
+      else mk(it, cid, "inventory");
+    }
+  }
+  for (const [cid, data] of Object.entries(equip)) for (const it of (data.items || [])) mk(it, cid, "equipped");
+  items.sort((a, b) => {
+    const an = a.def && a.def.displayProperties ? a.def.displayProperties.name : "";
+    const bn = b.def && b.def.displayProperties ? b.def.displayProperties.name : "";
+    return an.localeCompare(bn);
+  });
+  return { characters, items };
+}
+
+/* ---------- actions ---------- */
+async function equipItem(item) {
+  return api("/Destiny2/Actions/Items/" + item.instanceId + "/Equip/", "POST", { characterId: item.owner, itemId: item.instanceId, stackAmount: 1 });
+}
+async function transferTo(item, toCharId, membershipType) {
+  if (item.owner && item.owner !== toCharId) {
+    await api("/Destiny2/Actions/Items/TransferItem/", "POST", { itemReferenceHash: item.hash, stackAmount: 1, transferAmount: 1, itemId: item.instanceId, characterId: item.owner, membershipType });
+  }
+  return api("/Destiny2/Actions/Items/TransferItem/", "POST", { itemReferenceHash: item.hash, stackAmount: 1, transferAmount: 1, itemId: item.instanceId, characterId: toCharId, membershipType });
+}
+async function pullFromPostmaster(item, membershipType) {
+  return api("/Destiny2/Actions/Items/PullFromPostmaster/", "POST", { itemReferenceHash: item.hash, stackAmount: 1, transferAmount: 1, itemId: item.instanceId, characterId: item.owner, membershipType });
+}
+
+/* ---------- ui ---------- */
+const RARITY = { Exotic: "#d4af37", Legendary: "#522f92", Rare: "#5076a3", Uncommon: "#366e42", Common: "#c4c4c4" };
+
+function Toasts({ toasts }) {
+  return <div className="toasts">{toasts.map(t => <div key={t.id} className={"toast" + (t.err ? " err" : "")}>{t.text}</div>)}</div>;
+}
+
+function Card({ item, onTap }) {
+  const d = item.def; if (!d) return null;
+  const dp = d.displayProperties || {};
+  const rc = RARITY[d.inventory && d.inventory.tierTypeName] || "#262626";
+  return (
+    <div className={"card" + (item.location === "equipped" ? " equipped" : "")} style={{ "--rc": rc }}
+         onClick={() => onTap(item)} role="button">
+      <div className="strip" />
+      {dp.icon && <img src={"https://www.bungie.net" + dp.icon} alt={dp.name} loading="lazy" />}
+      {item.power ? <span className="pwr">{item.power}</span> : null}
+    </div>
+  );
+}
+
+function ItemSheet({ item, charName, busy, onAction, onClose }) {
+  const d = item.def; if (!d) return null;
+  const dp = d.displayProperties || {};
+  const rc = RARITY[d.inventory && d.inventory.tierTypeName] || "#262626";
+  const loc = item.location;
+  return (
+    <div className="backdrop" onClick={onClose}>
+      <div className="sheet" style={{ "--rc": rc }} onClick={e => e.stopPropagation()}>
+        <div className="title">{dp.name}</div>
+        <div className="meta">{d.itemTypeDisplayName || ""} · {d.inventory && d.inventory.tierTypeName} · {loc === "vault" ? "Vault" : loc === "postmaster" ? "Postmaster" : charName}{item.power ? " · " + item.power + " PWR" : ""}</div>
+        <div className="actions">
+          {busy && <div className="spin" style={{ margin: "0 auto" }} />}
+          {loc === "inventory" && <button className="btn" disabled={busy} onClick={() => onAction("equip", item)}>EQUIP</button>}
+          {loc === "inventory" && <button className="btn secondary" disabled={busy} onClick={() => onAction("vault", item)}>STORE IN VAULT</button>}
+          {loc === "vault" && <button className="btn" disabled={busy} onClick={() => onAction("take", item)}>TAKE TO {charName.toUpperCase()}</button>}
+          {loc === "vault" && <button className="btn secondary" disabled={busy} onClick={() => onAction("takeEquip", item)}>TAKE &amp; EQUIP</button>}
+          {loc === "postmaster" && <button className="btn" disabled={busy} onClick={() => onAction("pull", item)}>PULL FROM POSTMASTER</button>}
+          {loc === "equipped" && <div className="meta">Equipped gear cannot be moved. Equip something else first.</div>}
+          <button className="btn secondary" onClick={onClose}>CLOSE</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [stage, setStage] = useState("boot");
+  const [stageMsg, setStageMsg] = useState("Starting…");
+  const [error, setError] = useState(null);
+  const [world, setWorld] = useState(null);
+  const [manifest, setManifest] = useState(null);
+  const [activeChar, setActiveChar] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [toasts, setToasts] = useState([]);
+
+  const toast = useCallback((text, err) => {
+    const id = Date.now() + Math.random();
+    setToasts(t => [...t, { id, text, err }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 5000);
+  }, []);
+
+  const boot = useCallback(async () => {
+    setError(null); setStage("loading");
+    try {
+      setStageMsg("Fetching characters…");
+      const ms = await api("/User/GetMembershipsForCurrentUser/");
+      const list = (ms.destinyMemberships || []).filter(m => !m.crossSaveOverride || m.crossSaveOverride === m.membershipType);
+      if (!list.length) throw new Error("No Destiny membership found");
+      const me = list.find(m => m.membershipId === ms.primaryMembershipId) || list[0];
+      setStageMsg("Fetching profile…");
+      const profile = await api("/Destiny2/" + me.membershipType + "/Profile/" + me.membershipId + "/?components=100,102,200,201,205");
+      setStageMsg("Fetching manifest (one-time, caches on this device)…");
+      const man = await loadManifest();
+      setManifest(man);
+      const w = buildWorld(profile, man);
+      setWorld(w);
+      setActiveChar(w.characters[0] ? w.characters[0].id : null);
+      setStage("ready");
+    } catch (e) {
+      if (e.message === "SESSION_EXPIRED") { setStage("expired"); return; }
+      setError(e.message); setStage("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        if (location.search.includes("code=")) { await handleOAuthReturn(); }
+        if (getToken() && getToken().expires > Date.now()) boot();
+        else setStage(getToken() ? "expired" : "login");
+      } catch (e) { setError(e.message); setStage("error"); }
+    })();
+  }, [boot]);
+
+  async function run(fn, okMsg) {
+    setBusy(true);
+    try { await fn(); if (okMsg) toast(okMsg); await boot(); }
+    catch (e) { toast(e.message, true); }
+    finally { setBusy(false); }
+  }
+
+  async function onAction(kind, item) {
+    const mt = null;
+    if (kind === "equip") {
+      setSelected(null);
+      await run(() => equipItem(item), "Equipped " + item.def.displayProperties.name);
+    } else if (kind === "vault") {
+      setSelected(null);
+      await run(() => transferTo({ ...item, owner: item.owner || activeChar }, null, mt), "Stored in vault");
+    } else if (kind === "take" || kind === "takeEquip") {
+      setSelected(null);
+      await run(async () => {
+        await transferTo({ ...item, owner: null }, activeChar, mt);
+        if (kind === "takeEquip") await equipItem({ ...item, owner: activeChar });
+      }, (kind === "takeEquip" ? "Equipped " : "Taken: ") + item.def.displayProperties.name);
+    } else if (kind === "pull") {
+      setSelected(null);
+      await run(() => pullFromPostmaster(item, mt), "Pulled from postmaster");
+    }
+  }
+
+  if (stage === "boot" || stage === "loading" || stage === "login" || stage === "error" || stage === "expired") {
+    return (
+      <div className="login">
+        <div className="diamond" />
+        <h1 style={{ letterSpacing: 4 }}>D2ME</h1>
+        {stage === "loading" && <React.Fragment><div className="spin" /><div style={{ fontSize: 13, color: "#888" }}>{stageMsg}</div></React.Fragment>}
+        {error && <div className="err" style={{ maxWidth: 320 }}>{error}</div>}
+        {(stage === "login" || stage === "error" || stage === "expired") &&
+          <button className="btn" onClick={startLogin}>{stage === "expired" ? "SESSION ENDED — LOGIN AGAIN" : "LOGIN WITH BUNGIE.NET"}</button>}
+        <div style={{ fontSize: 11, color: "#555" }}>{REDIRECT_URI}</div>
+        <Toasts toasts={toasts} />
+      </div>
+    );
+  }
+
+  const w = world;
+  const active = w.characters.find(c => c.id === activeChar);
+  const owned = w.items.filter(i => i.owner === activeChar || i.location === "vault");
+  const equipped = owned.filter(i => i.location === "equipped");
+  const bag = owned.filter(i => i.location === "inventory");
+  const vault = w.items.filter(i => i.location === "vault");
+  const postmaster = w.items.filter(i => i.location === "postmaster" && i.owner === activeChar);
+  const byBucket = (list) => {
+    const m = new Map();
+    for (const it of list) {
+      const bn = (manifest.buckets[it.bucketHash] && manifest.buckets[it.bucketHash].displayProperties.name) || "Items";
+      if (!m.has(bn)) m.set(bn, []);
+      m.get(bn).push(it);
+    }
+    return [...m.entries()];
+  };
+  const Section = ({ title, list }) => list.length > 0 && (
+    <div className="section">
+      <h3>{title} ({list.length})</h3>
+      <div className="grid">{list.map(i => <Card key={i.instanceId} item={i} onTap={setSelected} />)}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="header">
+        <h1>D2ME</h1>
+        <button className="btn secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => { clearToken(); setStage("login"); }}>LOGOUT</button>
+      </div>
+      <div className="tabs">
+        {w.characters.map(c => (
+          <div key={c.id} className={"tab" + (c.id === activeChar ? " active" : "")} onClick={() => setActiveChar(c.id)}>
+            {c.emblem && <img src={c.emblem} alt="" />}
+            <span>{c.name}</span>
+            <span className="pwr">{c.light}</span>
+          </div>
+        ))}
+      </div>
+      {busy && <div style={{ padding: "4px 16px", fontSize: 11, color: "#ff6600" }}>Working…</div>}
+      <Section title={"Equipped — " + (active ? active.name : "")} list={equipped} />
+      <Section title="Inventory " list={bag} />
+      <Section title="Postmaster" list={postmaster} />
+      <Section title="Vault (all characters)" list={vault} />
+      {selected && <ItemSheet item={selected} busy={busy}
+        charName={selected.owner ? (w.characters.find(c => c.id === selected.owner) || {}).name || "" : "Vault"}
+        onAction={onAction} onClose={() => setSelected(null)} />}
+      <Toasts toasts={toasts} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
