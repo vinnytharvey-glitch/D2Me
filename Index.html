@@ -1,0 +1,67 @@
+# D2Me — Browser Edition — Project State
+Saved: 2026-10-11
+
+## Status line
+Goal: 100% = D2Me live at a permanent https URL, login working,
+inventory/equip/vault/postmaster usable from iOS Safari.
+Current overall: 80%
+
+## Resume instruction (new chat)
+Paste this file and say: "Continue D2Me Browser Edition. Deliverables queue
+starts at Job 1." Do not ask to go. One or two complete files per turn,
+never a truncated file. End every turn with status table + gauge.
+
+## Architecture (pivoted)
+- SINGLE FILE: `index.html` — the entire app. React 18 UMD + Babel standalone
+  from unpkg CDN. No npm, no build step, no Node, no Vite, no Tauri.
+- Hosting: GitHub Pages (username.github.io/d2me/) — permanent https URL.
+- OAuth: Bungie PUBLIC client (no secret, hourly re-login). Token exchange
+  happens in-browser (public-client eSPA pattern, same as DIM).
+- REDIRECT_URI is auto-derived: location.origin + location.pathname.
+  Printed on the login screen so it can be copied into the Bungie portal.
+- Manifest: full DestinyInventoryItemDefinition + DestinyBucketDefinition
+  JSON, cached in IndexedDB (db "d2me", store "kv", keys items-/buckets-
+  keyed by manifest version). Falls back to re-download if IDB fails.
+- Profile components: 100, 102, 200, 201, 205
+- Cross-save: memberships filtered where crossSaveOverride is 0 or
+  equals membershipType.
+- Item location: bucketHash 138197802 = Vault, 215593132 = Postmaster,
+  equipped = present in component 205, else inventory.
+- Vault items deduped across character inventories.
+- Char-to-char transfer: automatic vault bounce (two TransferItem calls).
+- Hardcoded config (edit in file header): API_KEY 15908787485f4498aa540c549430c2a,
+  CLIENT_ID 55635. Public client = these are not secrets by design.
+
+## Feature scope (browser edition)
+IN: login/session, character tabs with emblems + power, equipped/inventory/
+postmaster/vault sections, item sheet with actions (Equip, Store in Vault,
+Take, Take & Equip, Pull From Postmaster), vault bounce, toasts, manifest
+cache, session expiry re-login.
+OUT (lives only in the archived project): loadouts, drag-drop, item modal
+perks/stat bars, Tauri desktop. May be ported later if wanted.
+
+## ARCHIVED (do not resume unless user asks)
+"D2Me — React + Vite + Tauri edition" — 78% complete as of 2026-10-11.
+All source lives in prior chat turns (PROJECT_STATE.md v1 + delivered
+components LoadoutPanel, CharacterBar, InventoryGrid, ItemModal, deploy
+configs). Blocked only on: a machine with npm. Not deleted.
+
+## Deliverable queue (browser edition)
+1. USER: create GitHub repo `d2me` (public, empty)
+2. USER: add index.html (paste from "pivot" turn) → commit to main
+3. USER: Settings → Pages → Deploy from branch main / root → wait for URL
+4. USER: Bungie portal → D2Me → Redirect URL = <pages URL>,
+   Origin Header = <pages host, no slash> → Save
+5. USER: open app → LOGIN WITH BUNGIE.NET → report result (screenshot or
+   console/URL errors)
+6. ASSISTANT: fix whatever surfaces from Job 5
+7. OPTIONAL LATER: port loadouts / drag-drop / item modal from archived
+   edition into the single file (one feature per turn, file stays untruncated)
+
+## Known constraints
+- Bungie portal rejects "localhost" — 127.0.0.1 works locally; for the
+  live edition the Pages URL replaces this entirely.
+- Public client = token expires hourly → app shows re-login button (by design).
+- Manifest first-download is large (~tens of MB) — one-time per device,
+  then IndexedDB-cached per manifest version.
+- Tauri/desktop permanently out of scope unless user gets a computer.
