@@ -47,6 +47,8 @@
 </head>
 <body>
 <div id="root"><p style="color:#8a8a8a;padding:40px;font-family:sans-serif">Loading D2Me…</p></div>
+<script src="https://unpkg.com/eruda"></script>
+<script>try { eruda.init(); } catch (e) {}</script>
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
@@ -90,11 +92,11 @@ async function handleOAuthReturn() {
   return true;
 }
 
-/* ---------- bungie api ---------- */
+/* ---------- bungie api (FIXED: /Platform prefix) ---------- */
 async function api(path, method, body) {
   const tok = getToken();
   if (!tok || tok.expires < Date.now()) { clearToken(); throw new Error("SESSION_EXPIRED"); }
-  const res = await fetch("https://www.bungie.net" + path, {
+  const res = await fetch("https://www.bungie.net/Platform" + path, {
     method: method || "GET",
     headers: { "X-API-Key": API_KEY, "Authorization": "Bearer " + tok.access_token, "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined
@@ -107,17 +109,7 @@ async function api(path, method, body) {
   return j.Response;
 }
 
-/* ---------- manifest + IndexedDB cache ---------- */
-function idbOpen() {
-  return new Promise((res, rej) => {
-    const r = indexedDB.open("d2me", 1);
-    r.onupgradeneeded = () => r.result.createObjectStore("kv");
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-  });
-}
-async function idbSet(k, v) { try { const db = await idbOpen(); return new Promise((res) => { const tx = db.transaction("kv", "readwrite"); tx.objectStore("kv").put(v, k); tx.oncomplete = res; tx.onerror = res; }); } catch { return null; } }
-async function idbGet(k) { try { const db = await idbOpen(); return new Promise((res) => { const rq = db.transaction("kv", "readonly").objectStore("kv").get(k); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => res(null); }); } catch { return null; } }
-
+/* ---------- manifest + IndexedDB cache (manifest index has no /Platform duplication) ---------- */
 async function loadManifest() {
   const idxRes = await fetch("https://www.bungie.net/Platform/Destiny2/Manifest/", { headers: { "X-API-Key": API_KEY } });
   const idx = await idxRes.json();
