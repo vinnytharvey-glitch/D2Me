@@ -323,7 +323,7 @@ function App() {
       </div>
     );
   }
-
+ 
   const w = world;
   const active = w.characters.find(c => c.id === activeChar);
   const owned = w.items.filter(i => i.owner === activeChar || i.location === "vault");
