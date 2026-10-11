@@ -47,11 +47,9 @@
 </head>
 <body>
 <div id="root"><p style="color:#8a8a8a;padding:40px;font-family:sans-serif">Loading D2Me…</p></div>
-<script src="https://unpkg.com/eruda"></script>
-<script>try { eruda.init(); } catch (e) {}</script>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useCallback } = React;
 
@@ -325,7 +323,7 @@ function App() {
       </div>
     );
   }
- 
+
   const w = world;
   const active = w.characters.find(c => c.id === activeChar);
   const owned = w.items.filter(i => i.owner === activeChar || i.location === "vault");
@@ -366,7 +364,7 @@ function App() {
       </div>
       {busy && <div style={{ padding: "4px 16px", fontSize: 11, color: "#ff6600" }}>Working…</div>}
       <Section title={"Equipped — " + (active ? active.name : "")} list={equipped} />
-      <Section title="Inventory " list={bag} />
+      <Section title="Inventory" list={bag} />
       <Section title="Postmaster" list={postmaster} />
       <Section title="Vault (all characters)" list={vault} />
       {selected && <ItemSheet item={selected} busy={busy}
